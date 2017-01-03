@@ -1,0 +1,17 @@
+services:
+    alpixel_jira.security_context:
+            class: Alpixel\Bundle\JiraBundle\Request\SecurityContext
+            arguments:
+                - "%alpixel_jira.auth%"
+
+    alpixel_jira.request:
+        class: Alpixel\Bundle\JiraBundle\Request\Request
+        arguments:
+            - "@alpixel_jira.security_context"
+            - "%alpixel_jira.base_url%"
+            - "@monolog.logger"
+
+    alpixel_jira.api:
+        class: Alpixel\Bundle\JiraBundle\API\Jira
+        arguments:
+            - "@alpixel_jira.request"

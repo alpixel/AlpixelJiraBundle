@@ -39,5 +39,8 @@ Example :
     $jira = $this->get('alpixel_jira.api';
     $response = $jira->get('/mypermission');
     $data = $response->getData();
+    
+    $response = $jira->search('(status=resolved AND project=SysAdmin) OR assignee=bobsmith');
+    $data = $response->getData();
   }
 ```

@@ -40,7 +40,9 @@ Example :
     $response = $jira->get('/mypermission');
     $data = $response->getData();
     
-    $response = $jira->search('(status=resolved AND project=SysAdmin) OR assignee=bobsmith');
+    $response = $jira->search('(status=resolved AND project=SysAdmin) OR assignee=bobsmith', [
+        'orderBy' => 'name',
+    ]);
     $data = $response->getData();
   }
 ```

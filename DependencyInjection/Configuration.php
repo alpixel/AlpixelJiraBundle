@@ -2,6 +2,7 @@
 
 namespace Alpixel\Bundle\JiraBundle\DependencyInjection;
 
+use Alpixel\Bundle\JiraBundle\Request\BasicAuthentication;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
@@ -23,40 +24,42 @@ class Configuration implements ConfigurationInterface
         $rootNode
             ->children()
                 ->scalarNode('base_url')->isRequired()->cannotBeEmpty()->end()
-                ->append($this->addAuthParameters())
+                ->scalarNode('base_api')->isRequired()->cannotBeEmpty()->end()
+                ->append($this->addAuthConfiguration())
             ->end();
 
         return $treeBuilder;
     }
 
-    public function addAuthParameters()
+    public function addAuthConfiguration()
     {
         $treeBuilder = new TreeBuilder();
         $node = $treeBuilder->root('auth');
 
         $node->isRequired()
             ->children()
-                ->arrayNode('method')
-                    ->children()
-                        ->arrayNode('basic')
-                            ->children()
-                                ->scalarNode('username')->end()
-                                ->scalarNode('password')->end()
-                            ->end()
-                        ->end()
-                        ->arrayNode('oauth')
-                            ->children()
-                                ->scalarNode('id')->end()
-                                ->scalarNode('key')->end()
-                            ->end()
-                        ->end()
-                    ->end()
+                ->scalarNode('method')->defaultValue('basic')->end()
+                ->arrayNode('parameters')
+                    ->prototype('scalar')->end()
+                ->end()
+                ->scalarNode('authentication_class')
+                    ->defaultValue(BasicAuthentication::class)
                     ->beforeNormalization()
-                    ->ifTrue(function ($v) { return (count($v) === 1) ? false : true ; })
-                    ->thenInvalid('You must set only one authentification method.')
+                        ->always()
+                        ->then(function ($fqcn) {
+                            $isValidClass = false;
+                            if (class_exists($fqcn)) {
+                                $interfaces = class_implements($fqcn);
+                                $isValidClass = isset($interfaces['\Alpixel\Bundle\JiraBundle\Request\AuthenticationInterface']);
+                            }
+
+                            if (!$isValidClass) {
+                                throw new \InvalidArgumentException('The class has been not found or not implement "\Alpixel\Bundle\JiraBundle\Request\AuthenticationInterface"');
+                            }
+                        })
+                    ->end()
                 ->end()
             ->end();
-
         return $node;
     }
 }

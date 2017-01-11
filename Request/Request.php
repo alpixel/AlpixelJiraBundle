@@ -2,7 +2,6 @@
 
 namespace Alpixel\Bundle\JiraBundle\Request;
 
-use Alpixel\Bundle\JiraBundle\Data\JsonToArrayTransformer;
 use Alpixel\Bundle\JiraBundle\Response\Response;
 use Psr\Log\LoggerInterface;
 
@@ -12,105 +11,161 @@ use Psr\Log\LoggerInterface;
  */
 class Request
 {
-
     const METHOD_GET = 'GET';
     const METHOD_POST = 'POST';
-    const TIMEOUT = 300;
-
     /**
      * @var SecurityContext
      */
-    private $security;
+    private $securityContext;
 
     /**
      * @var array curl options
      */
-    private $options;
+    private $curlOptions;
 
     /**
      * @var LoggerInterface
      */
     private $monolog;
 
-    protected $baseUrl;
+    /**
+     * @var string
+     */
+    protected $baseUrlAPI;
 
-    public function __construct(SecurityContext $security, string $baseUrl, LoggerInterface $monolog)
+    public function __construct(string $baseUrlAPI, SecurityContext $securityContext, LoggerInterface $monolog)
     {
-        $this->security = $security;
+        $this->setBaseUrlAPI($baseUrlAPI);
+        $this->setSecurityContext($securityContext);
+        $this->setMonolog($monolog);
+    }
 
+    /**
+     * @return SecurityContext
+     */
+    public function getSecurityContext(): SecurityContext
+    {
+        return $this->securityContext;
+    }
+
+    /**
+     * @param SecurityContext $securityContext
+     * @return Request
+     */
+    public function setSecurityContext(SecurityContext $securityContext): Request
+    {
+        $this->securityContext = $securityContext;
+
+        return $this;
+    }
+
+    /**
+     * @return array
+     */
+    public function getCurlOptions(): array
+    {
+        return $this->curlOptions;
+    }
+
+    /**
+     * @param array $curlOptions
+     * @return Request
+     */
+    public function setCurlOptions(array $curlOptions): Request
+    {
+        $this->curlOptions = $curlOptions;
+
+        return $this;
+    }
+
+    /**
+     * @return string
+     */
+    public function getBaseUrlAPI(): string
+    {
+        return $this->baseUrlAPI;
+    }
+
+    /**
+     * @param string $baseUrl
+     * @return Request
+     */
+    protected function setBaseUrlAPI(string $baseUrl): Request
+    {
         if (substr($baseUrl, (strlen($baseUrl) -1 )) !== '/') {
             $baseUrl .= '/';
         }
 
-        $this->baseUrl = $baseUrl;
-        $this->monolog = $monolog;
+        $this->baseUrlAPI = $baseUrl;
+
+        return $this;
     }
 
-    protected function getMonolog()
+    /**
+     * @param LoggerInterface $monolog
+     * @return LoggerInterface
+     */
+    protected function setMonolog(LoggerInterface $monolog)
+    {
+        $this->monolog = $monolog;
+
+        return $this->monolog;
+    }
+
+    /**
+     * @return LoggerInterface
+     */
+    private function getMonolog()
     {
         return $this->monolog;
     }
 
-    protected function getSecurity() : SecurityContext
+    protected function applyAuthentication($ch)
     {
-        return $this->security;
+        $this->getSecurityContext()->applyAuthentication($ch);
     }
 
-    protected function applyAuthentication()
+    protected function resolveCurlContext(array $context = [])
     {
-        $security = $this->getSecurity();
-        if ($security->getAuthMethod() === SecurityContext::METHOD_BASIC) {
-            $parameters = $security->getCredentials();
-            $credentials = implode(':', $parameters);
-            $this->options[CURLOPT_USERPWD] = $credentials;
-        } else {
-            $this->getMonolog()->error('Alpixel JIRA API [Authentication] invalid format of credentials : '.$error, [
-                'file' => __FILE__,
-                'line' => __LINE__,
-            ]);
-            throw new \Exception('Invalid authentification.');
-        }
-    }
-
-    public function exec(string $url, array $opt = [])
-    {
-        $this->applyAuthentication();
-
-        $urlRequest = $this->baseUrl.$url;
-
-        $monolog  = $this->getMonolog();
-        $monolog->info('Alpixel JIRA API [Request] : '.$urlRequest, [
-            'file' => __FILE__,
-            'line' => __LINE__,
-        ]);
-
-        $options = array_replace([
-            CURLOPT_URL => $urlRequest,
-            CURLOPT_TIMEOUT => self::TIMEOUT,
+        return array_replace([
+            CURLOPT_TIMEOUT => 300,
             CURLOPT_FORBID_REUSE => true,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
             ],
-        ], $this->options, $opt);
+        ], $context);
+    }
+
+    public function createUrl($urlAPIEndpoint)
+    {
+        if (substr($urlAPIEndpoint, 0, 1) === '/') {
+            $urlAPIEndpoint = substr($urlAPIEndpoint, 1);
+        }
+
+        return $this->getBaseUrlAPI().$urlAPIEndpoint;
+    }
+
+    public function executeRequest(string $urlAPIEndpoint, array $curlOptions = [])
+    {
+        $url = $this->createUrl($urlAPIEndpoint);
+
+        $this->getMonolog()->info('Alpixel JIRA API [Request] : '.$urlAPIEndpoint);
 
         $ch = curl_init();
-        curl_setopt_array($ch, $options);
+        curl_setopt($ch, CURLOPT_URL, $url);
+
+        $curlContext = $this->resolveCurlContext($curlOptions);
+        curl_setopt_array($ch, $curlContext);
+
+        $this->applyAuthentication($ch);
 
         $data = curl_exec($ch);
         $error = curl_error($ch);
 
-        if (!empty($error)) {
-            $monolog->error('Alpixel JIRA API [Response] curl error : '.$error, [
-                'file' => __FILE__,
-                'line' => __LINE__,
-            ]);
-            throw new \RuntimeException(sprintf('curl reports the following errors : "%s"', $error));
-        }
-
-        $response = new Response(new JsonToArrayTransformer());
-        $response->setResponse($data, $error);
+        $response = new Response();
+        $response->setResponse($ch, $error, $data);
 
         return $response;
     }
@@ -119,20 +174,20 @@ class Request
     {
         switch ($method) {
             case self::METHOD_GET:
-                $this->options[CURLOPT_HTTPGET] = true;
+                $this->curlOptions[CURLOPT_HTTPGET] = true;
                 if (!empty($parameters)) {
                     $queryParams = http_build_query($parameters);
                     $url .= '?'.$queryParams;
                 }
                 break;
             case self::METHOD_POST:
-                $this->options[CURLOPT_POST] = true;
+                $this->curlOptions[CURLOPT_POST] = true;
                 break;
             default:
                 throw new \InvalidArgumentException(sprintf('Unknown HTTP method "%s"'), $method);
         }
 
-        return $this->exec($url, $opt);
+        return $this->executeRequest($url, $opt);
     }
 
     public function get(string $url, array $parameters = [], array $opt = [])

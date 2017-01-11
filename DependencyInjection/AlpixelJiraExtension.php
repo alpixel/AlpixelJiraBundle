@@ -22,8 +22,11 @@ class AlpixelJiraExtension extends Extension
         $configuration = new Configuration();
         $config = $this->processConfiguration($configuration, $configs);
 
-        $container->setParameter('alpixel_jira.auth', $config['auth']);
+        $container->setParameter('alpixel_jira.auth.method', $config['auth']['method']);
+        $container->setParameter('alpixel_jira.auth.parameters', $config['auth']['parameters']);
+        $container->setParameter('alpixel_jira.auth.authentication_class', $config['auth']['authentication_class']);
         $container->setParameter('alpixel_jira.base_url', $config['base_url']);
+        $container->setParameter('alpixel_jira.base_api', $config['base_api']);
 
         $loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
         $loader->load('services.yml');

@@ -2,83 +2,59 @@
 
 namespace Alpixel\Bundle\JiraBundle\Request;
 
-use Alpixel\Bundle\JiraBundle\Exception\SecurityContext\AuthMethodException;
-use Symfony\Component\OptionsResolver\OptionsResolver;
-
 
 /**
  * @author Alexis BUSSIERES <alexis@alpixel.fr>
  */
 class SecurityContext
 {
-    const METHOD_BASIC = 'basic';
-    const METHOD_OAUTH = 'oauth';
+    /**
+     * @var string
+     */
+    private $authClassName;
 
-    private $authMethod;
-    private $credentials;
+    /**
+     * @var AuthenticationInterface
+     */
+    private $authObject;
 
-    public function __construct(array $auth)
+    public function __construct(string $authClassName, AuthenticationProvider $authProvider)
     {
-        $resolver = new OptionsResolver();
-        $this->configureAuthMethod($resolver);
-        $resolver->resolve($auth);
-        $this->authMethod = strtolower(key($auth['method']));
-
-        $resolver = new OptionsResolver();
-        $this->configureCredentials($resolver, $this->getAuthMethod());
-        $this->credentials = $resolver->resolve($auth['method'][$this->getAuthMethod()]);
+        $this->authClassName = $authClassName;
+        $this->authObject = $this->createAuthObject($authClassName, $authProvider);
     }
 
-    public static function getAvailablesAuthMethods()
+    /**
+     * @return string
+     */
+    public function getAuthClassName(): string
     {
-        return [
-            self::METHOD_BASIC,
-            self::METHOD_OAUTH,
-        ];
+        return $this->authClassName;
     }
 
-    protected function configureAuthMethod(OptionsResolver $resolver)
+    /**
+     * @return AuthenticationInterface
+     */
+    public function getAuthObject(): AuthenticationInterface
     {
-        $resolver
-            ->setRequired('method')
-            ->setAllowedTypes('method', 'array')
-            ->setAllowedValues('method', function ($value) {
-                $method = strtolower(key($value));
-
-                if (!in_array($method, self::getAvailablesAuthMethods())) {
-                    throw new AuthMethodException();
-                }
-
-                return $method;
-            });
+        return $this->authObject;
     }
 
-    protected function configureCredentials(OptionsResolver $resolver, string $authMethod)
+    /**
+     * @param string $authClassName
+     * @param AuthenticationProvider $authProvider
+     * @return object
+     */
+    private function createAuthObject(string $authClassName, AuthenticationProvider $authProvider)
     {
-        if ($authMethod === self::METHOD_BASIC)  {
-            $resolver
-                ->setRequired('username')
-                ->setAllowedTypes('username', 'string')
-                ->setRequired('password')
-                ->setAllowedTypes('password', 'string');
-        } else if ($authMethod === self::METHOD_OAUTH) {
-            $resolver
-                ->setRequired('id')
-                ->setAllowedTypes('id', 'string')
-                ->setRequired('key')
-                ->setAllowedTypes('key', 'string');
-        } else {
-            throw new AuthMethodException();
-        }
+        return new $authClassName($authProvider);
     }
 
-    public function getAuthMethod()
-    {
-        return $this->authMethod;
-    }
 
-    public function getCredentials()
+    public function applyAuthentication($curlResource)
     {
-        return $this->credentials;
+        $this->getAuthObject()->applyAuthentication($curlResource);
+
+        return $this;
     }
 }

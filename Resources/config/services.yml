@@ -1,14 +1,19 @@
 services:
+    alpixel_jira.authentication_provider:
+        class: Alpixel\Bundle\JiraBundle\Request\AuthenticationProvider
+        arguments: ["%alpixel_jira.auth.method%", "%alpixel_jira.auth.parameters%"]
+
     alpixel_jira.security_context:
             class: Alpixel\Bundle\JiraBundle\Request\SecurityContext
             arguments:
-                - "%alpixel_jira.auth%"
+                - "%alpixel_jira.auth.authentication_class%"
+                - "@alpixel_jira.authentication_provider"
 
     alpixel_jira.request:
         class: Alpixel\Bundle\JiraBundle\Request\Request
         arguments:
+            - "%alpixel_jira.base_api%"
             - "@alpixel_jira.security_context"
-            - "%alpixel_jira.base_url%"
             - "@monolog.logger"
 
     alpixel_jira.api:
